@@ -160,6 +160,7 @@ bool encryptFile(const std::string& filepath) {
         std::cout << "[-] 无法读取文件: " << fixedPath << std::endl;
         return false;
     }
+    std::cout << "[+] 开始处理" << std::endl;
 
     std::vector<uint8_t> fileData(fileSize);
     inFile.read(reinterpret_cast<char*>(fileData.data()), fileSize);
@@ -210,6 +211,7 @@ bool encryptFile(const std::string& filepath) {
         return false;
     }
 
+    
     // 写入加密头和原始内容
     outFile.write(reinterpret_cast<const char*>(&header), sizeof(header));
     outFile.write(reinterpret_cast<const char*>(fileData.data()), fileData.size());
