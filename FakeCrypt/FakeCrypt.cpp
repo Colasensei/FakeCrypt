@@ -661,7 +661,6 @@ void batchProcessDirectory(const std::string& dirpath) {
 void runInteractiveMode() {
     std::cout << "FakeCrypt v" << (int)MAJOR_VERSION << "." << (int)MINOR_VERSION << std::endl;
     std::cout << "输入 'help' 查看命令，'exit' 退出" << std::endl;
-    std::cout << std::endl;
 
     std::string command;
     while (true) {
