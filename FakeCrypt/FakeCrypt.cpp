@@ -10,6 +10,8 @@
 #include <iomanip>
 #include <sstream>
 #include <algorithm>
+#include <cstdlib>
+#include <cstdio>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -24,7 +26,7 @@ namespace fs = std::filesystem;
 
 bool safeViewFile(const std::string& filepath) {
     if (!fs::exists(filepath)) {
-        std::cout<<"文件不存在" <<std:: endl;
+        std::cout << "文件不存在" << std::endl;
         return false;
     }
 
@@ -90,13 +92,14 @@ struct EncryptionHeader {
     uint8_t reserved[4];
     uint64_t timestamp;
     uint64_t originalSize;
+    uint8_t fileHash[32];  // SHA-256哈希值
     uint64_t checksum;
 };
 #pragma pack(pop)
 
-const uint8_t MAJOR_VERSION = 1;
+const uint8_t MAJOR_VERSION = 2;  // 版本升级到2.0
 const uint8_t MINOR_VERSION = 0;
-const uint8_t ALGORITHM_ID = 0x01;
+const uint8_t ALGORITHM_ID = 0x02;  // 使用全文件哈希校验
 const uint8_t MAGIC_SIGNATURE[4] = { 0x4D, 0x59, 0x43, 0x52 };  // "MYCR"
 const size_t HEADER_SIZE = sizeof(EncryptionHeader);
 
@@ -126,9 +129,14 @@ bool canAccessFile(const std::string& filepath) {
     return test.gcount() == 1 || !test.fail();
 }
 
-// ==================== 简单数学校验码计算 ====================
-uint64_t calculateSimpleChecksum(const uint8_t* data, size_t length) {
+// ==================== 校验码计算 ====================
+uint64_t calculateHeaderChecksum(const EncryptionHeader& header) {
+    EncryptionHeader tempHeader = header;
+    tempHeader.checksum = 0;
+
     uint64_t checksum = 0x123456789ABCDEF0ULL;
+    const uint8_t* data = reinterpret_cast<const uint8_t*>(&tempHeader);
+    size_t length = sizeof(EncryptionHeader) - sizeof(uint64_t);
 
     for (size_t i = 0; i < length; i++) {
         checksum = (checksum << 5) ^ (checksum >> 3) ^ static_cast<uint64_t>(data[i]);
@@ -138,16 +146,129 @@ uint64_t calculateSimpleChecksum(const uint8_t* data, size_t length) {
     return checksum;
 }
 
-bool verifyChecksum(const EncryptionHeader& header) {
-    EncryptionHeader tempHeader = header;
-    tempHeader.checksum = 0;
+bool verifyHeaderChecksum(const EncryptionHeader& header) {
+    return header.checksum == calculateHeaderChecksum(header);
+}
 
-    uint64_t calculated = calculateSimpleChecksum(
-        reinterpret_cast<const uint8_t*>(&tempHeader),
-        sizeof(EncryptionHeader) - sizeof(uint64_t)
-    );
+// ==================== 外部Python哈希验证 ====================
+/**
+ * 运行Python脚本计算文件哈希
+ */
+std::string runPythonHashScript(const std::string& filepath, bool isEncryptedFile) {
+    // 创建Python脚本
+    std::string pythonScript = R"(
+import hashlib
+import sys
+import struct
 
-    return calculated == header.checksum;
+def calculate_file_hash(filepath, is_encrypted):
+    try:
+        with open(filepath, 'rb') as f:
+            if is_encrypted:
+                # 对于加密文件，跳过头部计算内容哈希
+                f.seek(32 + 8 + 8 + 32)  # 跳过头部直到哈希字段之后
+                content = f.read()
+                return hashlib.sha256(content).hexdigest()
+            else:
+                # 对于原始文件，计算整个文件哈希
+                content = f.read()
+                return hashlib.sha256(content).hexdigest()
+    except Exception as e:
+        print(f"ERROR:{str(e)}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    if len(sys.argv) != 3:
+        print("ERROR:Invalid arguments")
+        sys.exit(1)
+    
+    filepath = sys.argv[1]
+    is_encrypted = sys.argv[2].lower() == 'true'
+    
+    hash_result = calculate_file_hash(filepath, is_encrypted)
+    print(f"HASH:{hash_result}")
+)";
+
+    // 将脚本写入临时文件
+    std::string tempScriptPath = fs::temp_directory_path().string() + "\\file_hash_verifier.py";
+    std::ofstream scriptFile(tempScriptPath);
+    if (!scriptFile) {
+        return "";
+    }
+    scriptFile << pythonScript;
+    scriptFile.close();
+
+    // 构建命令
+    std::string command = "python \"" + tempScriptPath + "\" \"" + filepath + "\" " +
+        (isEncryptedFile ? "true" : "false");
+
+    // 执行命令并捕获输出
+    FILE* pipe = _popen(command.c_str(), "r");
+    if (!pipe) {
+        fs::remove(tempScriptPath);
+        return "";
+    }
+
+    char buffer[256];
+    std::string result = "";
+    while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+        result += buffer;
+    }
+    _pclose(pipe);
+
+    // 清理临时脚本
+    fs::remove(tempScriptPath);
+
+    // 解析结果
+    if (result.find("HASH:") != std::string::npos) {
+        size_t start = result.find("HASH:") + 5;
+        size_t end = result.find("\n", start);
+        if (end != std::string::npos) {
+            return result.substr(start, end - start);
+        }
+    }
+    else if (result.find("ERROR:") != std::string::npos) {
+        std::cerr << "Python脚本错误: " << result << std::endl;
+    }
+
+    return "";
+}
+
+/**
+ * 计算文件的SHA-256哈希
+ */
+bool calculateFileHash(const std::string& filepath, uint8_t hash[32]) {
+    std::string hashStr = runPythonHashScript(filepath, false);
+    if (hashStr.empty()) {
+        return false;
+    }
+
+    // 将十六进制字符串转换为字节数组
+    for (int i = 0; i < 32; i++) {
+        std::string byteStr = hashStr.substr(i * 2, 2);
+        hash[i] = static_cast<uint8_t>(std::stoi(byteStr, nullptr, 16));
+    }
+
+    return true;
+}
+
+/**
+ * 验证文件内容哈希
+ */
+bool verifyFileContentHash(const std::string& filepath, const uint8_t expectedHash[32]) {
+    std::string currentHashStr = runPythonHashScript(filepath, true);
+    if (currentHashStr.empty()) {
+        return false;
+    }
+
+    // 将预期的哈希转换为字符串
+    std::ostringstream expectedStr;
+    expectedStr << std::hex << std::setfill('0');
+    for (int i = 0; i < 32; i++) {
+        expectedStr << std::setw(2) << static_cast<int>(expectedHash[i]);
+    }
+
+    return currentHashStr == expectedStr.str();
 }
 
 // ==================== 时间戳处理 ====================
@@ -187,7 +308,7 @@ bool isFileEncrypted(const std::string& filepath) {
         }
     }
 
-    return verifyChecksum(header);
+    return verifyHeaderChecksum(header);
 }
 
 /**
@@ -213,6 +334,14 @@ bool encryptFile(const std::string& filepath) {
         return false;
     }
 
+    // 计算文件哈希
+    uint8_t fileHash[32];
+    std::cout << "[+] 正在计算文件哈希..." << std::endl;
+    if (!calculateFileHash(fixedPath, fileHash)) {
+        std::cout << "[-] 无法计算文件哈希！" << std::endl;
+        return false;
+    }
+
     // 读取原始文件内容
     std::ifstream inFile(fixedPath, std::ios::binary);
     if (!inFile) {
@@ -235,13 +364,11 @@ bool encryptFile(const std::string& filepath) {
     std::memset(header.reserved, 0, 4);
     header.timestamp = getCurrentTimestamp();
     header.originalSize = fileSize;
+    std::memcpy(header.fileHash, fileHash, 32);
     header.checksum = 0;
 
-    // 计算校验码
-    header.checksum = calculateSimpleChecksum(
-        reinterpret_cast<const uint8_t*>(&header),
-        sizeof(EncryptionHeader) - sizeof(uint64_t)
-    );
+    // 计算头部校验码
+    header.checksum = calculateHeaderChecksum(header);
 
     // 创建加密副本（保持原文件不变）
     std::string encryptedFile;
@@ -270,16 +397,31 @@ bool encryptFile(const std::string& filepath) {
         return false;
     }
 
-    
     // 写入加密头和原始内容
     outFile.write(reinterpret_cast<const char*>(&header), sizeof(header));
     outFile.write(reinterpret_cast<const char*>(fileData.data()), fileData.size());
     outFile.close();
 
+    // 验证加密文件的内容哈希
+    std::cout << "[+] 验证加密文件完整性..." << std::endl;
+    if (!verifyFileContentHash(encryptedFile, fileHash)) {
+        std::cout << "[-] 加密文件验证失败！文件可能已损坏" << std::endl;
+        fs::remove(encryptedFile);
+        return false;
+    }
+
     std::cout << "[+] 加密成功！" << std::endl;
     std::cout << "    原始文件: " << fixedPath << " (" << fileSize << " 字节)" << std::endl;
     std::cout << "    加密文件: " << encryptedFile << " (" << (fileSize + sizeof(header)) << " 字节)" << std::endl;
     std::cout << "    加密时间: " << timestampToString(header.timestamp) << std::endl;
+
+    // 显示哈希值
+    std::cout << "    文件哈希: ";
+    std::cout << std::hex << std::setfill('0');
+    for (int i = 0; i < 32; i++) {
+        std::cout << std::setw(2) << static_cast<int>(header.fileHash[i]);
+    }
+    std::cout << std::dec << std::endl;
 
     return true;
 }
@@ -321,6 +463,13 @@ bool decryptFile(const std::string& filepath) {
         std::cout << "[-] 文件大小不匹配！可能已损坏。" << std::endl;
         std::cout << "    期望大小: " << header.originalSize << " 字节" << std::endl;
         std::cout << "    实际大小: " << contentSize << " 字节" << std::endl;
+        return false;
+    }
+
+    // 验证文件内容哈希
+    std::cout << "[+] 验证文件完整性..." << std::endl;
+    if (!verifyFileContentHash(fixedPath, header.fileHash)) {
+        std::cout << "[-] 文件完整性验证失败！文件可能已被篡改" << std::endl;
         return false;
     }
 
@@ -376,6 +525,12 @@ bool decryptFile(const std::string& filepath) {
     std::cout << "    解密文件: " << decryptedFile << " (" << contentSize << " 字节)" << std::endl;
     std::cout << "    加密时间: " << timestampToString(header.timestamp) << std::endl;
     std::cout << "    原始大小: " << header.originalSize << " 字节" << std::endl;
+    std::cout << "    文件哈希: ";
+    std::cout << std::hex << std::setfill('0');
+    for (int i = 0; i < 32; i++) {
+        std::cout << std::setw(2) << static_cast<int>(header.fileHash[i]);
+    }
+    std::cout << std::dec << std::endl;
 
     return true;
 }
@@ -403,6 +558,23 @@ void showFileInfo(const std::string& filepath) {
     std::cout << "    当前大小: " << currentSize << " 字节" << std::endl;
     std::cout << "    头部开销: " << (currentSize - header.originalSize) << " 字节" << std::endl;
     std::cout << "    算法标识: 0x" << std::hex << (int)header.algorithmId << std::dec << std::endl;
+
+    // 显示哈希值
+    std::cout << "    文件哈希: ";
+    std::cout << std::hex << std::setfill('0');
+    for (int i = 0; i < 32; i++) {
+        std::cout << std::setw(2) << static_cast<int>(header.fileHash[i]);
+    }
+    std::cout << std::dec << std::endl;
+
+    // 验证文件完整性
+    std::cout << "    完整性验证: ";
+    if (verifyFileContentHash(fixedPath, header.fileHash)) {
+        std::cout << "通过" << std::endl;
+    }
+    else {
+        std::cout << "失败（文件可能已被篡改）" << std::endl;
+    }
 
     // 计算加密时长
     uint64_t currentTime = getCurrentTimestamp();
@@ -474,8 +646,8 @@ void showEncryptionHeaderDetails(const std::string& filepath) {
     // 3. 算法标识
     std::cout << "算法标识: 0x" << std::hex << (int)header.algorithmId << std::dec;
     switch (header.algorithmId) {
-    case 0x00: std::cout << " (头部标记)"; break;
     case 0x01: std::cout << " (简单标记)"; break;
+    case 0x02: std::cout << " (全文件哈希校验)"; break;
     default: std::cout << " (未知)"; break;
     }
     std::cout << std::endl;
@@ -515,109 +687,35 @@ void showEncryptionHeaderDetails(const std::string& filepath) {
     }
     std::cout << std::endl;
 
-    // 8. 校验码
-    std::cout << "校验码 (8字节): 0x" << std::hex << std::setw(16) << std::setfill('0')
+    // 8. 文件哈希
+    std::cout << "文件哈希 (SHA-256): ";
+    std::cout << std::hex << std::setfill('0');
+    for (int i = 0; i < 32; i++) {
+        if (i > 0 && i % 8 == 0) std::cout << " ";
+        std::cout << std::setw(2) << (int)header.fileHash[i];
+    }
+    std::cout << std::dec << std::endl;
+
+    // 9. 校验码
+    std::cout << "头部校验码 (8字节): 0x" << std::hex << std::setw(16) << std::setfill('0')
         << header.checksum << std::dec << std::setfill(' ') << std::endl;
 
-    // 9. 验证校验码
-    std::cout << "校验码验证: ";
-    if (verifyChecksum(header)) {
+    // 10. 验证校验码
+    std::cout << "头部校验码验证: ";
+    if (verifyHeaderChecksum(header)) {
         std::cout << "通过" << std::endl;
     }
     else {
-        std::cout << "失败 (文件可能损坏或被篡改)" << std::endl;
+        std::cout << "失败 (头部可能损坏)" << std::endl;
     }
 
-    // 10. 原始文件头预览
-    std::cout << "\n[原始文件头预览 (前32字节)]" << std::endl;
-    std::cout << "────────────────────────────────────" << std::endl;
-
-    // 读取原始文件内容的前32字节
-    file.seekg(headerSize, std::ios::beg);
-    const size_t previewSize = 32;
-    std::vector<uint8_t> previewData(previewSize);
-    file.read(reinterpret_cast<char*>(previewData.data()), previewSize);
-    size_t bytesRead = file.gcount();
-
-    if (bytesRead > 0) {
-        // 十六进制显示
-        std::cout << "十六进制: ";
-        std::cout << std::hex << std::setfill('0');
-        for (size_t i = 0; i < bytesRead; i++) {
-            if (i > 0 && i % 8 == 0) std::cout << "  ";
-            std::cout << std::setw(2) << (int)previewData[i] << " ";
-        }
-        std::cout << std::dec << std::endl;
-
-        // ASCII显示
-        std::cout << "ASCII码:  ";
-        for (size_t i = 0; i < bytesRead; i++) {
-            if (i > 0 && i % 8 == 0) std::cout << "  ";
-            if (previewData[i] >= 32 && previewData[i] <= 126) {
-                std::cout << " " << (char)previewData[i] << " ";
-            }
-            else {
-                std::cout << " . ";
-            }
-        }
-        std::cout << std::endl;
-    }
-
-    // 11. 文件类型推测
-    std::cout << "\n[文件类型推测]" << std::endl;
-    std::cout << "────────────────────────────────────" << std::endl;
-
-    if (bytesRead >= 8) {
-        // 常见文件头检查
-        if (previewData[0] == 0x89 && previewData[1] == 0x50 &&
-            previewData[2] == 0x4E && previewData[3] == 0x47) {
-            std::cout << "类型: PNG图像文件" << std::endl;
-        }
-        else if (previewData[0] == 0xFF && previewData[1] == 0xD8 &&
-            previewData[2] == 0xFF) {
-            std::cout << "类型: JPEG图像文件" << std::endl;
-        }
-        else if (previewData[0] == 0x47 && previewData[1] == 0x49 &&
-            previewData[2] == 0x46 && previewData[3] == 0x38) {
-            std::cout << "类型: GIF图像文件" << std::endl;
-        }
-        else if (previewData[0] == 0x42 && previewData[1] == 0x4D) {
-            std::cout << "类型: BMP图像文件" << std::endl;
-        }
-        else if (previewData[0] == 0x25 && previewData[1] == 0x50 &&
-            previewData[2] == 0x44 && previewData[3] == 0x46) {
-            std::cout << "类型: PDF文档" << std::endl;
-        }
-        else if (previewData[0] == 0x50 && previewData[1] == 0x4B &&
-            previewData[2] == 0x03 && previewData[3] == 0x04) {
-            std::cout << "类型: ZIP压缩文件" << std::endl;
-        }
-        else if (previewData[0] == 0x7F && previewData[1] == 0x45 &&
-            previewData[2] == 0x4C && previewData[3] == 0x46) {
-            std::cout << "类型: ELF可执行文件" << std::endl;
-        }
-        else if (previewData[0] == 0x4D && previewData[1] == 0x5A) {
-            std::cout << "类型: Windows可执行文件" << std::endl;
-        }
-        else {
-            // 检查是否为文本文件
-            bool isText = true;
-            for (size_t i = 0; i < bytesRead; i++) {
-                if (previewData[i] < 9 || (previewData[i] > 13 && previewData[i] < 32)) {
-                    isText = false;
-                    break;
-                }
-            }
-            if (isText) {
-                std::cout << "类型: 文本文件" << std::endl;
-            }
-            else {
-                std::cout << "类型: 未知或二进制文件" << std::endl;
-            }
-        }
+    // 11. 文件完整性验证
+    std::cout << "文件完整性验证: ";
+    if (verifyFileContentHash(fixedPath, header.fileHash)) {
+        std::cout << "通过" << std::endl;
     }
     else {
-        std::cout << "类型: 无法确定（文件太小）" << std::endl;
+        std::cout << "失败 (文件内容可能已被篡改)" << std::endl;
     }
 
     std::cout << "────────────────────────────────────" << std::endl;
@@ -626,7 +724,8 @@ void showEncryptionHeaderDetails(const std::string& filepath) {
 // ==================== CLI交互界面 ====================
 void showHelp() {
     std::cout << "文件加密/解密工具 v" << (int)MAJOR_VERSION << "." << (int)MINOR_VERSION << std::endl;
-    std::cout << "说明: 本工具创建文件副本进行加密/解密，不会修改原始文件" << std::endl;
+    std::cout << "说明: 本工具创建文件副本进行加密/解密，使用SHA-256全文件哈希验证完整性" << std::endl;
+    std::cout << "注意: 需要Python环境支持哈希计算" << std::endl;
     std::cout << std::endl;
     std::cout << "参数模式:" << std::endl;
     std::cout << "  FakeCrypt help                   显示此帮助信息" << std::endl;
@@ -648,7 +747,8 @@ void showHelp() {
 void showVersion() {
     std::cout << "文件加密/解密工具 v" << (int)MAJOR_VERSION << "." << (int)MINOR_VERSION << std::endl;
     std::cout << "创建副本模式 - 不会修改原始文件" << std::endl;
-    std::cout << "校验算法: 简单多项式滚动校验" << std::endl;
+    std::cout << "校验算法: SHA-256全文件哈希验证" << std::endl;
+    std::cout << "需要: Python环境（用于哈希计算）" << std::endl;
 }
 
 void batchProcessDirectory(const std::string& dirpath) {
@@ -721,6 +821,7 @@ void batchProcessDirectory(const std::string& dirpath) {
 // ==================== CLI交互界面 ====================
 void runInteractiveMode() {
     std::cout << "FakeCrypt v" << (int)MAJOR_VERSION << "." << (int)MINOR_VERSION << std::endl;
+    std::cout << "使用SHA-256全文件哈希验证，需要Python环境支持" << std::endl;
     std::cout << "输入 'help' 查看命令，'exit' 退出" << std::endl;
 
     std::string command;
@@ -792,6 +893,19 @@ void runInteractiveMode() {
             }
             if (isFileEncrypted(arg)) {
                 std::cout << "[+] 文件已被加密" << std::endl;
+                // 验证完整性
+                std::ifstream file(arg, std::ios::binary);
+                EncryptionHeader header;
+                file.read(reinterpret_cast<char*>(&header), sizeof(header));
+                file.close();
+
+                std::cout << "    完整性验证: ";
+                if (verifyFileContentHash(arg, header.fileHash)) {
+                    std::cout << "通过" << std::endl;
+                }
+                else {
+                    std::cout << "失败（文件可能已被篡改）" << std::endl;
+                }
             }
             else {
                 std::cout << "[-] 文件未被加密" << std::endl;
@@ -833,6 +947,18 @@ int main(int argc, char* argv[]) {
 #ifdef _WIN32
     SetConsoleCP(65001);
 #endif
+
+    // 检查Python是否可用
+    std::cout << "[+] 检查Python环境..." << std::endl;
+    FILE* pipe = _popen("python --version", "r");
+    if (!pipe) {
+        std::cout << "[-] 错误: 未找到Python环境！" << std::endl;
+        std::cout << "    请安装Python并将其添加到系统PATH中" << std::endl;
+        system("pause");
+        return 1;
+    }
+    _pclose(pipe);
+    std::cout << "[+] Python环境检查通过" << std::endl;
 
     if (argc == 1) {
         runInteractiveMode();
