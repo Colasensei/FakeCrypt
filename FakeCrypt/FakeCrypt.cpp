@@ -11,27 +11,11 @@
 #include <sstream>
 #include <algorithm>
 
-//color
-#define ANSI_WHITE "\033[37m"
+// 只保留红、黄、绿三种颜色
 #define ANSI_RED "\033[31m"
 #define ANSI_GREEN "\033[32m"
 #define ANSI_YELLOW "\033[33m"
-#define ANSI_BLUE "\033[34m"
-#define ANSI_MAGENTA "\033[35m"
-#define ANSI_CYAN "\033[36m"
 #define ANSI_RESET "\033[0m"
-#define ANSI_BLACK "\033[30m"
-#define ANSI_GRAY "\033[90m"
-#define ANSI_BWHITE "\033[1;37m"
-#define ANSI_BRED "\033[1;31m"
-#define ANSI_BGREEN "\033[1;32m"
-#define ANSI_BYELLOW "\033[1;33m"
-#define ANSI_BBLUE "\033[1;34m"
-#define ANSI_BMAGENTA "\033[1;35m"
-#define ANSI_BCYAN "\033[1;36m"
-#define ANSI_BBLACK "\033[1;30m"
-#define ANSI_AQUA "\033[36m"
-#define ANSI_PURPLE "\033[35m"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -160,7 +144,7 @@ bool encryptFile(const std::string& filepath) {
     std::string fixedPath = fixFilePath(filepath);
 
     if (!canAccessFile(fixedPath)) {
-        std::cout << ANSI_RED << "[-] 无法打开文件: " << ANSI_WHITE << fixedPath << ANSI_RESET << std::endl;
+        std::cout << ANSI_RED << "[-] 无法打开文件: " << fixedPath << ANSI_RESET << std::endl;
         return false;
     }
 
@@ -179,7 +163,7 @@ bool encryptFile(const std::string& filepath) {
     // 读取原始文件内容
     std::ifstream inFile(fixedPath, std::ios::binary);
     if (!inFile) {
-        std::cout << ANSI_RED << "[-] 无法读取文件: " << ANSI_WHITE << fixedPath << ANSI_RESET << std::endl;
+        std::cout << ANSI_RED << "[-] 无法读取文件: " << fixedPath << ANSI_RESET << std::endl;
         return false;
     }
 
@@ -217,8 +201,8 @@ bool encryptFile(const std::string& filepath) {
 
     // 检查副本是否已存在
     if (fs::exists(encryptedFile)) {
-        std::cout << ANSI_YELLOW << "[-] 加密副本已存在: " << ANSI_WHITE << encryptedFile << ANSI_RESET << std::endl;
-        std::cout << ANSI_CYAN << "    是否覆盖？(y/n): " << ANSI_RESET;
+        std::cout << ANSI_YELLOW << "[-] 加密副本已存在: " << encryptedFile << ANSI_RESET << std::endl;
+        std::cout << "    是否覆盖？(y/n): ";
         char choice;
         std::cin >> choice;
         if (choice != 'y' && choice != 'Y') {
@@ -228,7 +212,7 @@ bool encryptFile(const std::string& filepath) {
 
     std::ofstream outFile(encryptedFile, std::ios::binary);
     if (!outFile) {
-        std::cout << ANSI_RED << "[-] 无法创建加密文件: " << ANSI_WHITE << encryptedFile << ANSI_RESET << std::endl;
+        std::cout << ANSI_RED << "[-] 无法创建加密文件: " << encryptedFile << ANSI_RESET << std::endl;
         return false;
     }
 
@@ -238,9 +222,9 @@ bool encryptFile(const std::string& filepath) {
     outFile.close();
 
     std::cout << ANSI_GREEN << "[+] 加密成功！" << ANSI_RESET << std::endl;
-    std::cout << ANSI_CYAN << "    原始文件: " << ANSI_WHITE << fixedPath << ANSI_GRAY << " (" << fileSize << " 字节)" << ANSI_RESET << std::endl;
-    std::cout << ANSI_CYAN << "    加密文件: " << ANSI_WHITE << encryptedFile << ANSI_GRAY << " (" << (fileSize + sizeof(header)) << " 字节)" << ANSI_RESET << std::endl;
-    std::cout << ANSI_CYAN << "    加密时间: " << ANSI_YELLOW << timestampToString(header.timestamp) << ANSI_RESET << std::endl;
+    std::cout << "    原始文件: " << fixedPath << " (" << fileSize << " 字节)" << std::endl;
+    std::cout << "    加密文件: " << encryptedFile << " (" << (fileSize + sizeof(header)) << " 字节)" << std::endl;
+    std::cout << "    加密时间: " << timestampToString(header.timestamp) << std::endl;
 
     return true;
 }
@@ -252,7 +236,7 @@ bool decryptFile(const std::string& filepath) {
     std::string fixedPath = fixFilePath(filepath);
 
     if (!canAccessFile(fixedPath)) {
-        std::cout << ANSI_RED << "[-] 无法打开文件: " << ANSI_WHITE << fixedPath << ANSI_RESET << std::endl;
+        std::cout << ANSI_RED << "[-] 无法打开文件: " << fixedPath << ANSI_RESET << std::endl;
         return false;
     }
 
@@ -263,7 +247,7 @@ bool decryptFile(const std::string& filepath) {
 
     std::ifstream inFile(fixedPath, std::ios::binary);
     if (!inFile) {
-        std::cout << ANSI_RED << "[-] 无法打开加密文件: " << ANSI_WHITE << fixedPath << ANSI_RESET << std::endl;
+        std::cout << ANSI_RED << "[-] 无法打开加密文件: " << fixedPath << ANSI_RESET << std::endl;
         return false;
     }
 
@@ -280,8 +264,8 @@ bool decryptFile(const std::string& filepath) {
     // 验证文件大小
     if (contentSize != header.originalSize) {
         std::cout << ANSI_RED << "[-] 文件大小不匹配！可能已损坏。" << ANSI_RESET << std::endl;
-        std::cout << ANSI_CYAN << "    期望大小: " << ANSI_WHITE << header.originalSize << " 字节" << ANSI_RESET << std::endl;
-        std::cout << ANSI_CYAN << "    实际大小: " << ANSI_WHITE << contentSize << " 字节" << ANSI_RESET << std::endl;
+        std::cout << "    期望大小: " << header.originalSize << " 字节" << std::endl;
+        std::cout << "    实际大小: " << contentSize << " 字节" << std::endl;
         return false;
     }
 
@@ -313,8 +297,8 @@ bool decryptFile(const std::string& filepath) {
 
     // 检查副本是否已存在
     if (fs::exists(decryptedFile)) {
-        std::cout << ANSI_YELLOW << "[-] 解密副本已存在: " << ANSI_WHITE << decryptedFile << ANSI_RESET << std::endl;
-        std::cout << ANSI_CYAN << "    是否覆盖？(y/n): " << ANSI_RESET;
+        std::cout << ANSI_YELLOW << "[-] 解密副本已存在: " << decryptedFile << ANSI_RESET << std::endl;
+        std::cout << "    是否覆盖？(y/n): ";
         char choice;
         std::cin >> choice;
         if (choice != 'y' && choice != 'Y') {
@@ -324,7 +308,7 @@ bool decryptFile(const std::string& filepath) {
 
     std::ofstream outFile(decryptedFile, std::ios::binary);
     if (!outFile) {
-        std::cout << ANSI_RED << "[-] 无法创建解密文件: " << ANSI_WHITE << decryptedFile << ANSI_RESET << std::endl;
+        std::cout << ANSI_RED << "[-] 无法创建解密文件: " << decryptedFile << ANSI_RESET << std::endl;
         return false;
     }
 
@@ -333,10 +317,10 @@ bool decryptFile(const std::string& filepath) {
     outFile.close();
 
     std::cout << ANSI_GREEN << "[+] 解密成功！" << ANSI_RESET << std::endl;
-    std::cout << ANSI_CYAN << "    加密文件: " << ANSI_WHITE << fixedPath << ANSI_GRAY << " (" << totalSize << " 字节)" << ANSI_RESET << std::endl;
-    std::cout << ANSI_CYAN << "    解密文件: " << ANSI_WHITE << decryptedFile << ANSI_GRAY << " (" << contentSize << " 字节)" << ANSI_RESET << std::endl;
-    std::cout << ANSI_CYAN << "    加密时间: " << ANSI_YELLOW << timestampToString(header.timestamp) << ANSI_RESET << std::endl;
-    std::cout << ANSI_CYAN << "    原始大小: " << ANSI_WHITE << header.originalSize << " 字节" << ANSI_RESET << std::endl;
+    std::cout << "    加密文件: " << fixedPath << " (" << totalSize << " 字节)" << std::endl;
+    std::cout << "    解密文件: " << decryptedFile << " (" << contentSize << " 字节)" << std::endl;
+    std::cout << "    加密时间: " << timestampToString(header.timestamp) << std::endl;
+    std::cout << "    原始大小: " << header.originalSize << " 字节" << std::endl;
 
     return true;
 }
@@ -357,19 +341,19 @@ void showFileInfo(const std::string& filepath) {
     uint64_t currentSize = fs::file_size(fixedPath);
 
     std::cout << ANSI_GREEN << "[+] 加密信息:" << ANSI_RESET << std::endl;
-    std::cout << ANSI_CYAN << "    文件路径: " << ANSI_WHITE << fixedPath << ANSI_RESET << std::endl;
-    std::cout << ANSI_CYAN << "    版本: " << ANSI_BLUE << "v" << (int)header.majorVersion << "." << (int)header.minorVersion << ANSI_RESET << std::endl;
-    std::cout << ANSI_CYAN << "    加密时间: " << ANSI_YELLOW << timestampToString(header.timestamp) << ANSI_RESET << std::endl;
-    std::cout << ANSI_CYAN << "    原始大小: " << ANSI_GREEN << header.originalSize << " 字节" << ANSI_RESET << std::endl;
-    std::cout << ANSI_CYAN << "    当前大小: " << ANSI_GREEN << currentSize << " 字节" << ANSI_RESET << std::endl;
-    std::cout << ANSI_CYAN << "    头部开销: " << ANSI_MAGENTA << (currentSize - header.originalSize) << " 字节" << ANSI_RESET << std::endl;
-    std::cout << ANSI_CYAN << "    算法标识: " << ANSI_BLUE << "0x" << std::hex << (int)header.algorithmId << std::dec << ANSI_RESET << std::endl;
+    std::cout << "    文件路径: " << fixedPath << std::endl;
+    std::cout << "    版本: v" << (int)header.majorVersion << "." << (int)header.minorVersion << std::endl;
+    std::cout << "    加密时间: " << timestampToString(header.timestamp) << std::endl;
+    std::cout << "    原始大小: " << header.originalSize << " 字节" << std::endl;
+    std::cout << "    当前大小: " << currentSize << " 字节" << std::endl;
+    std::cout << "    头部开销: " << (currentSize - header.originalSize) << " 字节" << std::endl;
+    std::cout << "    算法标识: 0x" << std::hex << (int)header.algorithmId << std::dec << std::endl;
 
     // 计算加密时长
     uint64_t currentTime = getCurrentTimestamp();
     uint64_t durationMinutes = (currentTime - header.timestamp) / (1000 * 60);
     if (durationMinutes > 0) {
-        std::cout << ANSI_CYAN << "    已加密时长: " << ANSI_PURPLE << durationMinutes << " 分钟" << ANSI_RESET << std::endl;
+        std::cout << "    已加密时长: " << durationMinutes << " 分钟" << std::endl;
     }
 }
 
@@ -378,13 +362,13 @@ void showEncryptionHeaderDetails(const std::string& filepath) {
     std::string fixedPath = fixFilePath(filepath);
 
     if (!canAccessFile(fixedPath)) {
-        std::cout << ANSI_RED << "[-] 无法打开文件: " << ANSI_WHITE << fixedPath << ANSI_RESET << std::endl;
+        std::cout << ANSI_RED << "[-] 无法打开文件: " << fixedPath << ANSI_RESET << std::endl;
         return;
     }
 
     std::ifstream file(fixedPath, std::ios::binary);
     if (!file) {
-        std::cout << ANSI_RED << "[-] 无法读取文件: " << ANSI_WHITE << fixedPath << ANSI_RESET << std::endl;
+        std::cout << ANSI_RED << "[-] 无法读取文件: " << fixedPath << ANSI_RESET << std::endl;
         return;
     }
     if (!isFileEncrypted(fixedPath)) {
@@ -406,19 +390,19 @@ void showEncryptionHeaderDetails(const std::string& filepath) {
     EncryptionHeader header;
     std::memcpy(&header, rawHeader.data(), headerSize);
 
-    std::cout << ANSI_BGREEN << "\n[+] 文件: " << ANSI_WHITE << fixedPath << ANSI_RESET << std::endl;
-    std::cout << ANSI_CYAN << "    文件大小: " << ANSI_WHITE << fs::file_size(fixedPath) << " 字节" << ANSI_RESET << std::endl;
+    std::cout << "\n[+] 文件: " << fixedPath << std::endl;
+    std::cout << "    文件大小: " << fs::file_size(fixedPath) << " 字节" << std::endl;
 
-    std::cout << ANSI_BMAGENTA << "\n[加密头详细信息]" << ANSI_RESET << std::endl;
-    std::cout << ANSI_GRAY << "────────────────────────────────────" << ANSI_RESET << std::endl;
+    std::cout << "\n[加密头详细信息]" << std::endl;
+    std::cout << "────────────────────────────────────" << std::endl;
 
     // 1. 魔数签名
-    std::cout << ANSI_BLUE << "魔数签名" << ANSI_WHITE << " (4字节): " << ANSI_RESET;
-    std::cout << ANSI_YELLOW << std::hex << std::setfill('0');
+    std::cout << "魔数签名 (4字节): ";
+    std::cout << std::hex << std::setfill('0');
     for (int i = 0; i < 4; i++) {
         std::cout << "0x" << std::setw(2) << (int)header.magic[i] << " ";
     }
-    std::cout << ANSI_WHITE << std::dec << "(" << ANSI_CYAN;
+    std::cout << std::dec << "(";
     for (int i = 0; i < 4; i++) {
         if (header.magic[i] >= 32 && header.magic[i] <= 126) {
             std::cout << (char)header.magic[i];
@@ -427,39 +411,39 @@ void showEncryptionHeaderDetails(const std::string& filepath) {
             std::cout << ".";
         }
     }
-    std::cout << ANSI_WHITE << ")" << ANSI_RESET << std::endl;
+    std::cout << ")" << std::endl;
 
     // 2. 版本信息
-    std::cout << ANSI_BLUE << "版本号" << ANSI_WHITE << ": " << ANSI_BGREEN << "v" << (int)header.majorVersion << "." << (int)header.minorVersion << ANSI_RESET << std::endl;
+    std::cout << "版本号: v" << (int)header.majorVersion << "." << (int)header.minorVersion << std::endl;
 
     // 3. 算法标识
-    std::cout << ANSI_BLUE << "算法标识" << ANSI_WHITE << ": " << ANSI_YELLOW << "0x" << std::hex << (int)header.algorithmId << std::dec;
+    std::cout << "算法标识: 0x" << std::hex << (int)header.algorithmId << std::dec;
     switch (header.algorithmId) {
-    case 0x00: std::cout << ANSI_CYAN << " (头部标记)"; break;
-    case 0x01: std::cout << ANSI_CYAN << " (简单标记)"; break;
-    default: std::cout << ANSI_RED << " (未知)"; break;
+    case 0x00: std::cout << " (头部标记)"; break;
+    case 0x01: std::cout << " (简单标记)"; break;
+    default: std::cout << " (未知)"; break;
     }
-    std::cout << ANSI_RESET << std::endl;
+    std::cout << std::endl;
 
     // 4. 标记长度
-    std::cout << ANSI_BLUE << "标记长度" << ANSI_WHITE << ": " << ANSI_GREEN << (int)header.headerLength << " 字节" << ANSI_RESET << std::endl;
+    std::cout << "标记长度: " << (int)header.headerLength << " 字节" << std::endl;
 
     // 5. 预留字段
-    std::cout << ANSI_BLUE << "预留字段" << ANSI_WHITE << " (4字节): " << ANSI_RESET;
-    std::cout << ANSI_GRAY << std::hex;
+    std::cout << "预留字段 (4字节): ";
+    std::cout << std::hex;
     for (int i = 0; i < 4; i++) {
         std::cout << "0x" << std::setw(2) << (int)header.reserved[i] << " ";
     }
-    std::cout << ANSI_WHITE << std::dec << ANSI_RESET << std::endl;
+    std::cout << std::dec << std::endl;
 
     // 6. 时间戳
-    std::cout << ANSI_BLUE << "时间戳" << ANSI_WHITE << " (8字节): " << ANSI_CYAN << header.timestamp << ANSI_RESET << std::endl;
-    std::cout << ANSI_BLUE << "加密时间" << ANSI_WHITE << ": " << ANSI_YELLOW << timestampToString(header.timestamp) << ANSI_RESET << std::endl;
+    std::cout << "时间戳 (8字节): " << header.timestamp << std::endl;
+    std::cout << "加密时间: " << timestampToString(header.timestamp) << std::endl;
 
     // 7. 原始文件大小
-    std::cout << ANSI_BLUE << "原始文件大小" << ANSI_WHITE << ": " << ANSI_GREEN << header.originalSize << " 字节" << ANSI_RESET;
+    std::cout << "原始文件大小: " << header.originalSize << " 字节";
     if (header.originalSize > 0) {
-        std::cout << ANSI_WHITE << " (" << ANSI_CYAN;
+        std::cout << " (";
         if (header.originalSize < 1024) {
             std::cout << header.originalSize << " B";
         }
@@ -472,16 +456,16 @@ void showEncryptionHeaderDetails(const std::string& filepath) {
         else {
             std::cout << std::fixed << std::setprecision(2) << header.originalSize / (1024.0 * 1024.0 * 1024.0) << " GB";
         }
-        std::cout << ANSI_WHITE << ")" << ANSI_RESET;
+        std::cout << ")";
     }
     std::cout << std::endl;
 
     // 8. 校验码
-    std::cout << ANSI_BLUE << "校验码" << ANSI_WHITE << " (8字节): " << ANSI_YELLOW << "0x" << std::hex << std::setw(16) << std::setfill('0')
-        << header.checksum << std::dec << std::setfill(' ') << ANSI_RESET << std::endl;
+    std::cout << "校验码 (8字节): 0x" << std::hex << std::setw(16) << std::setfill('0')
+        << header.checksum << std::dec << std::setfill(' ') << std::endl;
 
     // 9. 验证校验码
-    std::cout << ANSI_BLUE << "校验码验证" << ANSI_WHITE << ": ";
+    std::cout << "校验码验证: ";
     if (verifyChecksum(header)) {
         std::cout << ANSI_GREEN << "通过" << ANSI_RESET << std::endl;
     }
@@ -490,8 +474,8 @@ void showEncryptionHeaderDetails(const std::string& filepath) {
     }
 
     // 10. 原始文件头预览
-    std::cout << ANSI_BMAGENTA << "\n[原始文件头预览 (前32字节)]" << ANSI_RESET << std::endl;
-    std::cout << ANSI_GRAY << "────────────────────────────────────" << ANSI_RESET << std::endl;
+    std::cout << "\n[原始文件头预览 (前32字节)]" << std::endl;
+    std::cout << "────────────────────────────────────" << std::endl;
 
     // 读取原始文件内容的前32字节
     file.seekg(headerSize, std::ios::beg);
@@ -502,63 +486,63 @@ void showEncryptionHeaderDetails(const std::string& filepath) {
 
     if (bytesRead > 0) {
         // 十六进制显示
-        std::cout << ANSI_BLUE << "十六进制" << ANSI_WHITE << ": " << ANSI_RESET;
-        std::cout << ANSI_CYAN << std::hex << std::setfill('0');
+        std::cout << "十六进制: ";
+        std::cout << std::hex << std::setfill('0');
         for (size_t i = 0; i < bytesRead; i++) {
             if (i > 0 && i % 8 == 0) std::cout << "  ";
             std::cout << std::setw(2) << (int)previewData[i] << " ";
         }
-        std::cout << std::dec << ANSI_RESET << std::endl;
+        std::cout << std::dec << std::endl;
 
         // ASCII显示
-        std::cout << ANSI_BLUE << "ASCII码" << ANSI_WHITE << ":  " << ANSI_RESET;
+        std::cout << "ASCII码:  ";
         for (size_t i = 0; i < bytesRead; i++) {
             if (i > 0 && i % 8 == 0) std::cout << "  ";
             if (previewData[i] >= 32 && previewData[i] <= 126) {
-                std::cout << ANSI_GREEN << " " << (char)previewData[i] << " " << ANSI_RESET;
+                std::cout << " " << (char)previewData[i] << " ";
             }
             else {
-                std::cout << ANSI_GRAY << " . " << ANSI_RESET;
+                std::cout << " . ";
             }
         }
         std::cout << std::endl;
     }
 
     // 11. 文件类型推测
-    std::cout << ANSI_BMAGENTA << "\n[文件类型推测]" << ANSI_RESET << std::endl;
-    std::cout << ANSI_GRAY << "────────────────────────────────────" << ANSI_RESET << std::endl;
+    std::cout << "\n[文件类型推测]" << std::endl;
+    std::cout << "────────────────────────────────────" << std::endl;
 
     if (bytesRead >= 8) {
         // 常见文件头检查
         if (previewData[0] == 0x89 && previewData[1] == 0x50 &&
             previewData[2] == 0x4E && previewData[3] == 0x47) {
-            std::cout << ANSI_BLUE << "类型" << ANSI_WHITE << ": " << ANSI_GREEN << "PNG图像文件" << ANSI_RESET << std::endl;
+            std::cout << "类型: PNG图像文件" << std::endl;
         }
         else if (previewData[0] == 0xFF && previewData[1] == 0xD8 &&
             previewData[2] == 0xFF) {
-            std::cout << ANSI_BLUE << "类型" << ANSI_WHITE << ": " << ANSI_GREEN << "JPEG图像文件" << ANSI_RESET << std::endl;
+            std::cout << "类型: JPEG图像文件" << std::endl;
         }
         else if (previewData[0] == 0x47 && previewData[1] == 0x49 &&
             previewData[2] == 0x46 && previewData[3] == 0x38) {
-            std::cout << ANSI_BLUE << "类型" << ANSI_WHITE << ": " << ANSI_GREEN << "GIF图像文件" << ANSI_RESET << std::endl;
+            std::cout << "类型: GIF图像文件" << std::endl;
         }
         else if (previewData[0] == 0x42 && previewData[1] == 0x4D) {
-            std::cout << ANSI_BLUE << "类型" << ANSI_WHITE << ": " << ANSI_GREEN << "BMP图像文件" << ANSI_RESET << std::endl;
+            std::cout << "类型: BMP图像文件" << std::endl;
         }
         else if (previewData[0] == 0x25 && previewData[1] == 0x50 &&
             previewData[2] == 0x44 && previewData[3] == 0x46) {
-            std::cout << ANSI_BLUE << "类型" << ANSI_WHITE << ": " << ANSI_GREEN << "PDF文档" << ANSI_RESET << std::endl;
+            std::cout << "类型: PDF文档" << std::endl;
         }
         else if (previewData[0] == 0x50 && previewData[1] == 0x4B &&
             previewData[2] == 0x03 && previewData[3] == 0x04) {
-            std::cout << ANSI_BLUE << "类型" << ANSI_WHITE << ": " << ANSI_GREEN << "ZIP压缩文件" << ANSI_RESET << std::endl;
+            std::cout << "类型: ZIP压缩文件" << std::endl;
         }
         else if (previewData[0] == 0x7F && previewData[1] == 0x45 &&
             previewData[2] == 0x4C && previewData[3] == 0x46) {
-            std::cout << ANSI_BLUE << "类型" << ANSI_WHITE << ": " << ANSI_GREEN << "ELF可执行文件" << ANSI_RESET << std::endl;
+            std::cout << "类型: ELF可执行文件" << std::endl;
         }
         else if (previewData[0] == 0x4D && previewData[1] == 0x5A) {
-            std::cout << ANSI_BLUE << "类型" << ANSI_WHITE << ": " << ANSI_GREEN << "Windows可执行文件" << ANSI_RESET << std::endl;
+            std::cout << "类型: Windows可执行文件" << std::endl;
         }
         else {
             // 检查是否为文本文件
@@ -570,58 +554,58 @@ void showEncryptionHeaderDetails(const std::string& filepath) {
                 }
             }
             if (isText) {
-                std::cout << ANSI_BLUE << "类型" << ANSI_WHITE << ": " << ANSI_GREEN << "文本文件" << ANSI_RESET << std::endl;
+                std::cout << "类型: 文本文件" << std::endl;
             }
             else {
-                std::cout << ANSI_BLUE << "类型" << ANSI_WHITE << ": " << ANSI_YELLOW << "未知或二进制文件" << ANSI_RESET << std::endl;
+                std::cout << "类型: 未知或二进制文件" << std::endl;
             }
         }
     }
     else {
-        std::cout << ANSI_BLUE << "类型" << ANSI_WHITE << ": " << ANSI_RED << "无法确定（文件太小）" << ANSI_RESET << std::endl;
+        std::cout << ANSI_RED << "类型: 无法确定（文件太小）" << ANSI_RESET << std::endl;
     }
 
-    std::cout << ANSI_GRAY << "────────────────────────────────────" << ANSI_RESET << std::endl;
+    std::cout << "────────────────────────────────────" << std::endl;
 }
 
 // ==================== CLI交互界面 ====================
 void showHelp() {
-    std::cout << ANSI_BGREEN << "文件加密/解密工具" << ANSI_BLUE << " v" << (int)MAJOR_VERSION << "." << (int)MINOR_VERSION << ANSI_RESET << std::endl;
-    std::cout << ANSI_CYAN << "说明: 本工具创建文件副本进行加密/解密，不会修改原始文件" << ANSI_RESET << std::endl;
-    std::cout << ANSI_GRAY << std::string(60, '=') << ANSI_RESET << std::endl;
+    std::cout << "文件加密/解密工具 v" << (int)MAJOR_VERSION << "." << (int)MINOR_VERSION << std::endl;
+    std::cout << "说明: 本工具创建文件副本进行加密/解密，不会修改原始文件" << std::endl;
+    std::cout << std::string(60, '=') << std::endl;
 
-    std::cout << ANSI_BYELLOW << "参数模式:" << ANSI_RESET << std::endl;
-    std::cout << ANSI_WHITE << "  FakeCrypt help" << ANSI_GRAY << "                   显示此帮助信息" << ANSI_RESET << std::endl;
-    std::cout << ANSI_WHITE << "  FakeCrypt version" << ANSI_GRAY << "                显示版本信息" << ANSI_RESET << std::endl;
-    std::cout << ANSI_WHITE << "  FakeCrypt <文件路径>" << ANSI_GRAY << "              自动加密/解密文件" << ANSI_RESET << std::endl;
-    std::cout << ANSI_WHITE << "  FakeCrypt" << ANSI_GRAY << "                        进入交互模式" << ANSI_RESET << std::endl;
+    std::cout << "参数模式:" << std::endl;
+    std::cout << "  FakeCrypt help                   显示此帮助信息" << std::endl;
+    std::cout << "  FakeCrypt version                显示版本信息" << std::endl;
+    std::cout << "  FakeCrypt <文件路径>              自动加密/解密文件" << std::endl;
+    std::cout << "  FakeCrypt                        进入交互模式" << std::endl;
 
-    std::cout << ANSI_BYELLOW << "\n交互模式命令:" << ANSI_RESET << std::endl;
-    std::cout <<  "  enc <文件>" << ANSI_GRAY << "      加密文件（创建 _encrypted 副本）" << ANSI_RESET << std::endl;
-    std::cout <<  "  dec <文件>" << ANSI_GRAY << "      解密文件（创建 _decrypted 副本）" << ANSI_RESET << std::endl;
-    std::cout <<  "  check <文件>" << ANSI_GRAY << "    检查文件状态" << ANSI_RESET << std::endl;
-    std::cout <<  "  info <文件>" << ANSI_GRAY << "     显示加密信息" << ANSI_RESET << std::endl;
-    std::cout <<  "  header <文件>" << ANSI_GRAY << "   分析加密文件头" << ANSI_RESET << std::endl;
-    std::cout <<  "  batch <目录>" << ANSI_GRAY << "    批量处理目录" << ANSI_RESET << std::endl;
-    std::cout <<  "  help" << ANSI_GRAY << "           显示帮助" << ANSI_RESET << std::endl;
-    std::cout <<  "  exit" << ANSI_GRAY << "           退出程序" << ANSI_RESET << std::endl;
+    std::cout << "\n交互模式命令:" << std::endl;
+    std::cout << "  enc <文件>      加密文件（创建 _encrypted 副本）" << std::endl;
+    std::cout << "  dec <文件>      解密文件（创建 _decrypted 副本）" << std::endl;
+    std::cout << "  check <文件>    检查文件状态" << std::endl;
+    std::cout << "  info <文件>     显示加密信息" << std::endl;
+    std::cout << "  header <文件>   分析加密文件头" << std::endl;
+    std::cout << "  batch <目录>    批量处理目录" << std::endl;
+    std::cout << "  help           显示帮助" << std::endl;
+    std::cout << "  exit           退出程序" << std::endl;
 
-    std::cout << ANSI_GRAY << std::string(60, '=') << ANSI_RESET << std::endl;
-    std::cout << ANSI_CYAN << "注意: 所有路径都需要使用绝对路径" << ANSI_RESET << std::endl;
+    std::cout << std::string(60, '=') << std::endl;
+    std::cout << "注意: 所有路径都需要使用绝对路径" << std::endl;
 }
 
 void showVersion() {
-    std::cout  << "文件加密/解密工具" << ANSI_BLUE << " v" << (int)MAJOR_VERSION << "." << (int)MINOR_VERSION << ANSI_RESET << std::endl;
-    std::cout << ANSI_CYAN << "创建副本模式 - 不会修改原始文件" << ANSI_RESET << std::endl;
-    std::cout << ANSI_YELLOW << "校验算法: 简单多项式滚动校验" << ANSI_RESET << std::endl;
-    std::cout << ANSI_MAGENTA << "签名: " << ANSI_WHITE << "\"MYCR\" (0x4D 0x59 0x43 0x52)" << ANSI_RESET << std::endl;
+    std::cout << "文件加密/解密工具 v" << (int)MAJOR_VERSION << "." << (int)MINOR_VERSION << std::endl;
+    std::cout << "创建副本模式 - 不会修改原始文件" << std::endl;
+    std::cout << "校验算法: 简单多项式滚动校验" << std::endl;
+    std::cout << "签名: \"MYCR\" (0x4D 0x59 0x43 0x52)" << std::endl;
 }
 
 void batchProcessDirectory(const std::string& dirpath) {
     std::string fixedPath = fixFilePath(dirpath);
 
     if (!fs::exists(fixedPath) || !fs::is_directory(fixedPath)) {
-        std::cout << ANSI_RED << "[-] 目录不存在或无法访问: " << ANSI_WHITE << fixedPath << ANSI_RESET << std::endl;
+        std::cout << ANSI_RED << "[-] 目录不存在或无法访问: " << fixedPath << ANSI_RESET << std::endl;
         return;
     }
 
@@ -648,18 +632,18 @@ void batchProcessDirectory(const std::string& dirpath) {
         return;
     }
 
-    std::cout << ANSI_GREEN << "[+] 找到 " << ANSI_BGREEN << allFiles.size() << ANSI_GREEN << " 个文件" << ANSI_RESET << std::endl;
-    std::cout << ANSI_CYAN << "    开始处理..." << ANSI_RESET << std::endl;
+    std::cout << ANSI_GREEN << "[+] 找到 " << allFiles.size() << " 个文件" << ANSI_RESET << std::endl;
+    std::cout << "    开始处理..." << std::endl;
 
     int successCount = 0;
     int skipCount = 0;
     int errorCount = 0;
 
     for (const auto& file : allFiles) {
-        std::cout << "\n" << ANSI_BWHITE << "处理文件: " << ANSI_WHITE << fs::path(file).filename().string() << ANSI_RESET << std::endl;
+        std::cout << "\n处理文件: " << fs::path(file).filename().string() << std::endl;
 
         if (isFileEncrypted(file)) {
-            std::cout << ANSI_BLUE << "  状态: " << ANSI_CYAN << "已加密，执行解密..." << ANSI_RESET << std::endl;
+            std::cout << "  状态: 已加密，执行解密..." << std::endl;
             if (decryptFile(file)) {
                 successCount++;
             }
@@ -668,7 +652,7 @@ void batchProcessDirectory(const std::string& dirpath) {
             }
         }
         else {
-            std::cout << ANSI_GREEN << "  状态: " << ANSI_BGREEN << "未加密，执行加密..." << ANSI_RESET << std::endl;
+            std::cout << "  状态: 未加密，执行加密..." << std::endl;
             if (encryptFile(file)) {
                 successCount++;
             }
@@ -678,20 +662,20 @@ void batchProcessDirectory(const std::string& dirpath) {
         }
     }
 
-    std::cout << ANSI_BGREEN << "\n[+] 批量处理完成！" << ANSI_RESET << std::endl;
-    std::cout << ANSI_GREEN << "    ✓ 成功: " << ANSI_BGREEN << successCount << ANSI_GREEN << " 个文件" << ANSI_RESET << std::endl;
-    std::cout << ANSI_RED << "    ✗ 失败: " << ANSI_BRED << errorCount << ANSI_RED << " 个文件" << ANSI_RESET << std::endl;
-    std::cout << ANSI_YELLOW << "    ⚠ 跳过: " << ANSI_BYELLOW << skipCount << ANSI_YELLOW << " 个文件" << ANSI_RESET << std::endl;
+    std::cout << ANSI_GREEN << "\n[+] 批量处理完成！" << ANSI_RESET << std::endl;
+    std::cout << ANSI_GREEN << "    成功: " << successCount << " 个文件" << ANSI_RESET << std::endl;
+    std::cout << ANSI_RED << "    失败: " << errorCount << " 个文件" << ANSI_RESET << std::endl;
+    std::cout << ANSI_YELLOW << "    跳过: " << skipCount << " 个文件" << ANSI_RESET << std::endl;
 }
 
 // ==================== CLI交互界面 ====================
 void runInteractiveMode() {
-    std::cout << "FakeCrypt" << ANSI_YELLOW << " v" << (int)MAJOR_VERSION << "." << (int)MINOR_VERSION << ANSI_RESET << std::endl;
-    std::cout  <<"输入 'help' 查看命令，'exit' 退出" << ANSI_RESET << std::endl;
+    std::cout << "FakeCrypt v" << (int)MAJOR_VERSION << "." << (int)MINOR_VERSION << std::endl;
+    std::cout << "输入 'help' 查看命令，'exit' 退出" << std::endl;
 
     std::string command;
     while (true) {
-        std::cout << ANSI_BWHITE << "\n> " << ANSI_RESET;
+        std::cout << "\n> ";
         std::getline(std::cin, command);
 
         if (command.empty()) continue;
@@ -727,7 +711,7 @@ void runInteractiveMode() {
         std::transform(cmdLower.begin(), cmdLower.end(), cmdLower.begin(), ::tolower);
 
         if (cmdLower == "exit" || cmdLower == "quit") {
-            std::cout << ANSI_BLUE << "再见！" << ANSI_RESET << std::endl;
+            std::cout << "再见！" << std::endl;
             break;
         }
         else if (cmdLower == "help") {
@@ -737,8 +721,8 @@ void runInteractiveMode() {
             // 检查是否为绝对路径
             if (!fs::path(arg).is_absolute()) {
                 std::cout << ANSI_RED << "[-] 错误: 请使用绝对路径！" << ANSI_RESET << std::endl;
-                std::cout << ANSI_GRAY << "    当前路径: " << ANSI_WHITE << arg << ANSI_RESET << std::endl;
-                std::cout << ANSI_CYAN << "    示例: encrypt \"C:\\Users\\Name\\My Documents\\file.txt\"" << ANSI_RESET << std::endl;
+                std::cout << "    当前路径: " << arg << std::endl;
+                std::cout << "    示例: encrypt \"C:\\Users\\Name\\My Documents\\file.txt\"" << std::endl;
                 continue;
             }
             encryptFile(arg);
@@ -746,7 +730,7 @@ void runInteractiveMode() {
         else if (cmdLower == "dec" && !arg.empty()) {
             if (!fs::path(arg).is_absolute()) {
                 std::cout << ANSI_RED << "[-] 错误: 请使用绝对路径！" << ANSI_RESET << std::endl;
-                std::cout << ANSI_GRAY << "    当前路径: " << ANSI_WHITE << arg << ANSI_RESET << std::endl;
+                std::cout << "    当前路径: " << arg << std::endl;
                 continue;
             }
             decryptFile(arg);
@@ -757,10 +741,10 @@ void runInteractiveMode() {
                 continue;
             }
             if (isFileEncrypted(arg)) {
-                std::cout << ANSI_GREEN << "[✓] 文件已被加密" << ANSI_RESET << std::endl;
+                std::cout << ANSI_GREEN << "[+] 文件已被加密" << ANSI_RESET << std::endl;
             }
             else {
-                std::cout << ANSI_YELLOW << "[✗] 文件未被加密" << ANSI_RESET << std::endl;
+                std::cout << ANSI_YELLOW << "[-] 文件未被加密" << ANSI_RESET << std::endl;
             }
         }
         else if (cmdLower == "info" && !arg.empty()) {
@@ -789,7 +773,7 @@ void runInteractiveMode() {
         }
         else {
             std::cout << ANSI_RED << "[!] 未知命令或缺少参数，输入 'help' 查看可用命令" << ANSI_RESET << std::endl;
-            std::cout << ANSI_CYAN << "    正确格式: command \"绝对路径\"" << ANSI_RESET << std::endl;
+            std::cout << "    正确格式: command \"绝对路径\"" << std::endl;
         }
     }
 }
@@ -843,7 +827,7 @@ int main(int argc, char* argv[]) {
                 std::string filepath = args[0];
 
                 if (!fs::exists(filepath)) {
-                    std::cout << ANSI_RED << "[-] 文件不存在: " << ANSI_WHITE << filepath << ANSI_RESET << std::endl;
+                    std::cout << ANSI_RED << "[-] 文件不存在: " << filepath << ANSI_RESET << std::endl;
 #ifdef _WIN32
                     system("pause");
 #endif
@@ -851,12 +835,12 @@ int main(int argc, char* argv[]) {
                 }
 
                 if (fs::is_directory(filepath)) {
-                    std::cout << ANSI_BLUE << "[+] 检测到目录，进入批量处理模式..." << ANSI_RESET << std::endl;
+                    std::cout << ANSI_GREEN << "[+] 检测到目录，进入批量处理模式..." << ANSI_RESET << std::endl;
                     batchProcessDirectory(filepath);
                 }
                 else {
                     if (isFileEncrypted(filepath)) {
-                        std::cout << ANSI_BLUE << "[+] 检测到已加密文件，执行解密..." << ANSI_RESET << std::endl;
+                        std::cout << ANSI_GREEN << "[+] 检测到已加密文件，执行解密..." << ANSI_RESET << std::endl;
                         decryptFile(filepath);
                     }
                     else {
