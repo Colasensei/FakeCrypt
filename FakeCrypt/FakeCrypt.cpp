@@ -20,6 +20,65 @@
 
 namespace fs = std::filesystem;
 
+// ==================== 文件安全操作 ====================
+
+bool safeViewFile(const std::string& filepath) {
+    if (!fs::exists(filepath)) {
+        std::cout<<"文件不存在" <<std:: endl;
+        return false;
+    }
+
+    std::string extension = fs::path(filepath).extension().string();
+    std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+
+    const std::vector<std::string> allowedExtensions = {
+        ".txt", ".md", ".log", ".ini", ".inf", ".cfg", ".json", ".xml",
+        ".jpg", ".jpeg", ".png", ".bmp", ".gif", ".ico",
+        ".mp3", ".wav", ".ogg", ".flac",
+        ".mp4", ".avi", ".mkv", ".mov",
+        ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx"
+    };
+
+    bool isAllowed = false;
+    for (const auto& ext : allowedExtensions) {
+        if (extension == ext) {
+            isAllowed = true;
+            break;
+        }
+    }
+
+    if (!isAllowed) {
+        std::cout << "不支持的文件类型" << std::endl;
+        return false;
+    }
+
+    auto filesize = fs::file_size(filepath);
+    const size_t MAX_FILE_SIZE = 2000 * 1024 * 1024;
+
+    if (filesize > MAX_FILE_SIZE) {
+        std::cout << "文件过大" << std::endl;
+        return false;
+    }
+
+    HINSTANCE result = ShellExecuteA(
+        NULL,
+        "open",
+        filepath.c_str(),
+        NULL,
+        NULL,
+        SW_SHOWNORMAL
+    );
+
+    if ((INT_PTR)result <= 32) {
+        DWORD error = GetLastError();
+        std::string errorMsg = "无法打开文件。错误代码: " + std::to_string(error);
+        std::cout << errorMsg << std::endl;
+        return false;
+    }
+
+    return true;
+}
+
 // ==================== 加密头结构定义 ====================
 #pragma pack(push, 1)
 struct EncryptionHeader {
@@ -819,27 +878,56 @@ int main(int argc, char* argv[]) {
 
                 if (!fs::exists(filepath)) {
                     std::cout << "[-] 文件不存在: " << filepath << std::endl;
+                    system("pause");
                     return 1;
                 }
 
                 if (fs::is_directory(filepath)) {
                     std::cout << "[+] 检测到目录，进入批量处理模式..." << std::endl;
                     batchProcessDirectory(filepath);
+                    system("pause");
                 }
                 else {
                     if (isFileEncrypted(filepath)) {
                         std::cout << "[+] 检测到已加密文件，执行解密..." << std::endl;
                         decryptFile(filepath);
+                        // 获取解密后的文件路径
+                        std::string decPath;
+                        std::string encryptedStr = "_encrypted";
+                        std::string fixedPath = fixFilePath(filepath);
+
+                        size_t encPos = fixedPath.find(encryptedStr);
+                        if (encPos != std::string::npos) {
+                            // 文件名中包含 _encrypted
+                            decPath = fixedPath.substr(0, encPos) + "_decrypted" +
+                                fixedPath.substr(encPos + encryptedStr.length());
+                        }
+                        else {
+                            // 普通解密，添加 _decrypted 后缀
+                            size_t dotPos = fixedPath.find_last_of('.');
+                            if (dotPos != std::string::npos) {
+                                decPath = fixedPath.substr(0, dotPos) + "_decrypted" +
+                                    fixedPath.substr(dotPos);
+                            }
+                            else {
+                                decPath = fixedPath + "_decrypted";
+                            }
+                        }
+
+                        safeViewFile(decPath);
+                        system("pause");
                     }
                     else {
                         std::cout << "[+] 检测到未加密文件，执行加密..." << std::endl;
                         encryptFile(filepath);
+                        system("pause");
                     }
                 }
             }
         }
         else {
             std::cout << "[-] 参数过多！使用 'FakeCrypt help' 查看帮助" << std::endl;
+            system("pause");
             return 1;
         }
     }
