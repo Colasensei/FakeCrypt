@@ -39,12 +39,39 @@ void simpleProgressBar(float progress) {
     std::cout.flush();
 }
 
+// 使用Windows内置的tar命令（Windows 10+）
+bool extractZipUsingTar(const std::string& zipPath, const std::string& extractDir) {
+    std::string command = "tar -xf \"" + zipPath + "\" -C \"" + extractDir + "\"";
+    std::cout << "使用tar命令解压: " << command << std::endl;
 
-// ==================== 文件安全操作 ====================
+    int result = std::system(command.c_str());
+
+    if (result == 0) {
+        return true;
+    }
+
+    // tar命令可能失败，尝试另一个语法
+    command = "powershell Expand-Archive -Path \"" + zipPath + "\" -DestinationPath \"" + extractDir + "\" -Force";
+    std::cout << "尝试PowerShell解压: " << command << std::endl;
+
+    result = std::system(command.c_str());
+    return result == 0;
+}
+
+
+
+bool isDirectoryEmpty(const std::string& dirPath) {
+    try {
+        return fs::is_empty(dirPath);
+    }
+    catch (...) {
+        return true;
+    }
+}
 
 bool safeViewFile(const std::string& filepath) {
     if (!fs::exists(filepath)) {
-        std::cout<<"文件不存在" <<std:: endl;
+        std::cout << "文件不存在" << std::endl;
         return false;
     }
 
@@ -56,7 +83,8 @@ bool safeViewFile(const std::string& filepath) {
         ".jpg", ".jpeg", ".png", ".bmp", ".gif", ".ico",
         ".mp3", ".wav", ".ogg", ".flac",
         ".mp4", ".avi", ".mkv", ".mov",
-        ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx"
+        ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+        ".zip"
     };
 
     bool isAllowed = false;
@@ -80,25 +108,130 @@ bool safeViewFile(const std::string& filepath) {
         return false;
     }
 
-    HINSTANCE result = ShellExecuteA(
-        NULL,
-        "open",
-        filepath.c_str(),
-        NULL,
-        NULL,
-        SW_SHOWNORMAL
-    );
+    // 如果是zip文件
+    if (extension == ".zip") {
+        try {
+        
 
-    if ((INT_PTR)result <= 32) {
-        DWORD error = GetLastError();
-        std::string errorMsg = "无法打开文件。错误代码: " + std::to_string(error);
-        std::cout << errorMsg << std::endl;
-        return false;
+            // 创建解压目录
+            fs::path zipPath(filepath);
+            std::string baseName = zipPath.stem().string();
+            std::string extractDir = zipPath.parent_path().string() + "\\" + baseName + "_extracted";
+
+            // 如果目录已存在，添加数字后缀
+            int counter = 1;
+            std::string originalDir = extractDir;
+            while (fs::exists(extractDir)) {
+                extractDir = originalDir + "_" + std::to_string(counter++);
+            }
+
+            // 创建目录
+            if (!fs::create_directories(extractDir)) {
+                std::cout << "无法创建解压目录: " << extractDir << std::endl;
+                return false;
+            }
+
+            std::cout << "解压目录: " << extractDir << std::endl;
+            std::cout << "ZIP文件: " << filepath << std::endl;
+
+            bool extractionSuccess = false;
+
+            // 尝试使用tar命令（Windows 10+）
+            if (!extractionSuccess) {
+                std::cout << "\n尝试使用tar命令解压..." << std::endl;
+                extractionSuccess = extractZipUsingTar(filepath, extractDir);
+            }
+
+            // 检查是否解压成功
+            if (extractionSuccess) {
+                // 检查目录是否为空
+                if (isDirectoryEmpty(extractDir)) {
+                    std::cout << "警告: 解压目录为空，可能解压失败或ZIP文件为空" << std::endl;
+                }
+
+                std::cout << "解压完成，打开文件夹..." << extractDir << std::endl;
+
+                // 显示解压目录内容
+                try {
+                    int fileCount = 0;
+                    for (const auto& entry : fs::directory_iterator(extractDir)) {
+                        if (fileCount < 10) { // 只显示前10个文件
+                            std::cout << "  " << entry.path().filename().string() << std::endl;
+                        }
+                        fileCount++;
+                    }
+                    std::cout << "总共 " << fileCount << " 个文件/文件夹" << std::endl;
+                }
+                catch (...) {
+                    std::cout << "无法列出目录内容" << std::endl;
+                }
+
+                // 打开文件夹
+                HINSTANCE result = ShellExecuteA(
+                    NULL,
+                    "open",
+                    extractDir.c_str(),
+                    NULL,
+                    NULL,
+                    SW_SHOWNORMAL
+                );
+
+                if ((INT_PTR)result <= 32) {
+                    // 尝试另一种方式打开
+                    std::string exploreCommand = "explorer \"" + extractDir + "\"";
+                    std::system(exploreCommand.c_str());
+                }
+
+                return true;
+            }
+            else {
+                std::cout << "所有解压方法都失败了" << std::endl;
+                std::cout << "请确保:\n";
+                std::cout << "1. Python已安装并在PATH中\n";
+                std::cout << "2. 或者Windows版本是10以上（支持tar命令）\n";
+                std::cout << "3. 或者安装了7-Zip\n";
+
+                // 清理空目录
+                if (isDirectoryEmpty(extractDir)) {
+                    fs::remove(extractDir);
+                }
+
+                return false;
+            }
+        }
+        catch (const std::exception& e) {
+            std::cout << "处理zip文件时出错: " << e.what() << std::endl;
+            return false;
+        }
+        catch (...) {
+            std::cout << "处理zip文件时发生未知错误" << std::endl;
+            return false;
+        }
     }
+    else {
+        // 其他文件类型的原有处理逻辑
+        HINSTANCE result = ShellExecuteA(
+            NULL,
+            "open",
+            filepath.c_str(),
+            NULL,
+            NULL,
+            SW_SHOWNORMAL
+        );
 
-    return true;
+        if ((INT_PTR)result <= 32) {
+            DWORD error = GetLastError();
+            std::string errorMsg = "无法打开文件。错误代码: " + std::to_string(error);
+            std::cout << errorMsg << std::endl;
+
+            // 尝试使用默认程序
+            std::string cmd = "start \"\" \"" + filepath + "\"";
+            std::system(cmd.c_str());
+        }
+
+        return true;
+    }
 }
-
 // ==================== 加密头结构定义 ====================
 #pragma pack(push, 1)
 struct EncryptionHeader {
@@ -114,7 +247,7 @@ struct EncryptionHeader {
 };
 #pragma pack(pop)
 
-const uint8_t MAJOR_VERSION = 1;
+const uint8_t MAJOR_VERSION = 2;
 const uint8_t MINOR_VERSION = 0;
 const uint8_t ALGORITHM_ID = 0x01;
 const uint8_t MAGIC_SIGNATURE[4] = { 0x4D, 0x59, 0x43, 0x52 };  // "MYCR"
@@ -412,6 +545,7 @@ bool decryptFile(const std::string& filepath) {
     std::cout << "    加密时间: " << timestampToString(header.timestamp) << std::endl;
     std::cout << "    原始大小: " << header.originalSize << " 字节" << std::endl;
 
+    
     return true;
 }
 
@@ -660,7 +794,7 @@ void showEncryptionHeaderDetails(const std::string& filepath) {
 
 // ==================== CLI交互界面 ====================
 void showHelp() {
-    std::cout << "文件加密/解密工具 v" << (int)MAJOR_VERSION << "." << (int)MINOR_VERSION << std::endl;
+    std::cout << "FakeCrypt v" << (int)MAJOR_VERSION << "." << (int)MINOR_VERSION << std::endl;
     std::cout << "说明: 本工具创建文件副本进行加密/解密，不会修改原始文件" << std::endl;
     std::cout << std::endl;
     std::cout << "参数模式:" << std::endl;
@@ -681,9 +815,7 @@ void showHelp() {
 }
 
 void showVersion() {
-    std::cout << "文件加密/解密工具 v" << (int)MAJOR_VERSION << "." << (int)MINOR_VERSION << std::endl;
-    std::cout << "创建副本模式 - 不会修改原始文件" << std::endl;
-    std::cout << "校验算法: 简单多项式滚动校验" << std::endl;
+    std::cout << "FakeCrypt v" << (int)MAJOR_VERSION << "." << (int)MINOR_VERSION << std::endl;
 }
 
 void batchProcessDirectory(const std::string& dirpath) {
@@ -788,7 +920,6 @@ void runInteractiveMode() {
         std::transform(cmdLower.begin(), cmdLower.end(), cmdLower.begin(), ::tolower);
 
         if (cmdLower == "exit" || cmdLower == "quit") {
-            std::cout << "再见！" << std::endl;
             break;
         }
         else if (cmdLower == "help") {
@@ -811,6 +942,7 @@ void runInteractiveMode() {
                 continue;
             }
             decryptFile(arg);
+            
         }
         else if (cmdLower == "check" && !arg.empty()) {
             if (!fs::path(arg).is_absolute()) {
@@ -940,9 +1072,17 @@ int main(int argc, char* argv[]) {
                                 decPath = fixedPath + "_decrypted";
                             }
                         }
+                        std::cout<<"键入W以打开解密后的文件；其他键以结束...";
+                        
+                        char key;
+                        std::cin >> key;
+                        if (key == 'W'||key=='w') {
+                            safeViewFile(decPath);
 
-                        safeViewFile(decPath);
-                        system("pause");
+                        }
+                        else {
+
+                        }
                     }
                     else {
                         std::cout << "[+] 检测到未加密文件，执行加密..." << std::endl;
