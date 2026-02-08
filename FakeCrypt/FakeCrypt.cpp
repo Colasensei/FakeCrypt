@@ -20,6 +20,26 @@
 
 namespace fs = std::filesystem;
 
+
+// ==================== 显示进度条 ====================
+
+void simpleProgressBar(float progress) {
+    int barWidth = 50;
+    int pos = static_cast<int>(barWidth * progress);
+
+    if (progress > 1.0f) progress = 1.0f;
+    if (progress < 0.0f) progress = 0.0f;
+
+    std::cout << "[";
+    for (int i = 0; i < barWidth; ++i) {
+        if (i < pos) std::cout << "=";
+        else std::cout << " ";
+    }
+    std::cout << "] " << static_cast<int>(progress * 100.0f) << "%\r";
+    std::cout.flush();
+}
+
+
 // ==================== 文件安全操作 ====================
 
 bool safeViewFile(const std::string& filepath) {
@@ -220,10 +240,12 @@ bool encryptFile(const std::string& filepath) {
         return false;
     }
     std::cout << "[+] 开始处理" << std::endl;
+    simpleProgressBar(0.1);
 
     std::vector<uint8_t> fileData(fileSize);
     inFile.read(reinterpret_cast<char*>(fileData.data()), fileSize);
     inFile.close();
+    simpleProgressBar(0.2);
 
     // 准备加密头
     EncryptionHeader header;
@@ -236,12 +258,14 @@ bool encryptFile(const std::string& filepath) {
     header.timestamp = getCurrentTimestamp();
     header.originalSize = fileSize;
     header.checksum = 0;
+    simpleProgressBar(0.4);
 
     // 计算校验码
     header.checksum = calculateSimpleChecksum(
         reinterpret_cast<const uint8_t*>(&header),
         sizeof(EncryptionHeader) - sizeof(uint64_t)
     );
+    simpleProgressBar(0.6);
 
     // 创建加密副本（保持原文件不变）
     std::string encryptedFile;
@@ -252,6 +276,7 @@ bool encryptFile(const std::string& filepath) {
     else {
         encryptedFile = fixedPath + "_encrypted";
     }
+    simpleProgressBar(0.8);
 
     // 检查副本是否已存在
     if (fs::exists(encryptedFile)) {
@@ -275,6 +300,7 @@ bool encryptFile(const std::string& filepath) {
     outFile.write(reinterpret_cast<const char*>(&header), sizeof(header));
     outFile.write(reinterpret_cast<const char*>(fileData.data()), fileData.size());
     outFile.close();
+    simpleProgressBar(1.0);
 
     std::cout << "[+] 加密成功！" << std::endl;
     std::cout << "    原始文件: " << fixedPath << " (" << fileSize << " 字节)" << std::endl;
@@ -324,14 +350,19 @@ bool decryptFile(const std::string& filepath) {
         return false;
     }
 
+    std::cout << "[+] 开始处理" << std::endl;
+    simpleProgressBar(0.1);
+
     // 读取加密内容
     std::vector<uint8_t> contentData(contentSize);
     inFile.read(reinterpret_cast<char*>(contentData.data()), contentSize);
     inFile.close();
+    simpleProgressBar(0.3);
 
     // 创建解密副本
     std::string decryptedFile;
     std::string encryptedStr = "_encrypted";
+    simpleProgressBar(0.5);
 
     // 尝试移除 "_encrypted" 后缀
     size_t encPos = fixedPath.find(encryptedStr);
@@ -349,6 +380,7 @@ bool decryptFile(const std::string& filepath) {
             decryptedFile = fixedPath + "_decrypted";
         }
     }
+    simpleProgressBar(0.7);
 
     // 检查副本是否已存在
     if (fs::exists(decryptedFile)) {
@@ -370,6 +402,8 @@ bool decryptFile(const std::string& filepath) {
     // 写入原始内容
     outFile.write(reinterpret_cast<const char*>(contentData.data()), contentData.size());
     outFile.close();
+    simpleProgressBar(1.0);
+    std::cout << std::endl;
 
     std::cout << "[+] 解密成功！" << std::endl;
     std::cout << "    加密文件: " << fixedPath << " (" << totalSize << " 字节)" << std::endl;
@@ -665,14 +699,6 @@ void batchProcessDirectory(const std::string& dirpath) {
     for (const auto& entry : fs::recursive_directory_iterator(fixedPath)) {
         if (fs::is_regular_file(entry)) {
             std::string filepath = entry.path().string();
-
-            // 跳过临时文件和已处理的文件
-            if (filepath.find("_encrypted") != std::string::npos ||
-                filepath.find("_decrypted") != std::string::npos ||
-                filepath.find(".tmp") != std::string::npos) {
-                continue;
-            }
-
             allFiles.push_back(filepath);
         }
     }

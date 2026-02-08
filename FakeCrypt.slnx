@@ -3,5 +3,5 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
-  <Project Path="FakeCrypt/FakeCrypt.vcxproj" />
+  <Project Path="FakeCrypt/FakeCrypt.vcxproj" Id="6d6b6451-bef3-444e-a0c5-fdcae3604bf0" />
 </Solution>
