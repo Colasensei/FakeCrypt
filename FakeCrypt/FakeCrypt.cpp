@@ -301,6 +301,7 @@ bool encryptFile(const std::string& filepath) {
     outFile.write(reinterpret_cast<const char*>(fileData.data()), fileData.size());
     outFile.close();
     simpleProgressBar(1.0);
+    std::cout << std::endl;
 
     std::cout << "[+] 加密成功！" << std::endl;
     std::cout << "    原始文件: " << fixedPath << " (" << fileSize << " 字节)" << std::endl;
